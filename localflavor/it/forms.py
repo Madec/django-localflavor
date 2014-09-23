@@ -17,7 +17,8 @@ from .it_region import REGION_CHOICES, REGION_PROVINCE_CHOICES
 from .util import vat_number_validation, ssn_validation
 
 
-phone_digits_re = re.compile(r'^(?:\+?39)?((0\d{1,3})(\d{4,8})|(3\d{2})(\d{6,8}))$')
+phone_digits_re = re.compile(
+    r'^(?:\+?39)?((0\d{1,3})(\d{4,8})|(3\d{2})(\d{6,8}))$')
 
 
 class ITZipCodeField(RegexField):
@@ -30,8 +31,8 @@ class ITZipCodeField(RegexField):
     }
 
     def __init__(self, max_length=None, min_length=None, *args, **kwargs):
-        super(ITZipCodeField, self).__init__(r'^\d{5}$',
-                                             max_length, min_length, *args, **kwargs)
+        super(ITZipCodeField, self).__init__(
+            r'^\d{5}$', max_length, min_length, *args, **kwargs)
 
 
 class ITRegionSelect(Select):
@@ -44,10 +45,12 @@ class ITRegionSelect(Select):
 
 class ITRegionProvinceSelect(Select):
     """
-    A Select widget that uses a named group list of IT regions mapped to regions as its choices.
+    A Select widget that uses a named group list of IT regions mapped
+    to regions as its choices.
     """
     def __init__(self, attrs=None):
-        super(ITRegionProvinceSelect, self).__init__(attrs, choices=REGION_PROVINCE_CHOICES)
+        super(ITRegionProvinceSelect, self).__init__(
+            attrs, choices=REGION_PROVINCE_CHOICES)
 
 
 class ITProvinceSelect(Select):
@@ -60,8 +63,8 @@ class ITProvinceSelect(Select):
 
 class ITSocialSecurityNumberField(RegexField):
     """
-    A form field that validates Italian Social Security numbers (codice fiscale) for
-    both persons and entities.
+    A form field that validates Italian Social Security numbers
+    (codice fiscale) for both persons and entities.
 
     For reference see http://www.agenziaentrate.it/ and search for:
 
@@ -78,9 +81,10 @@ class ITSocialSecurityNumberField(RegexField):
     }
 
     def __init__(self, max_length=None, min_length=None, *args, **kwargs):
-        super(ITSocialSecurityNumberField, self).__init__(r'^\w{3}\s*\w{3}\s*\w{5}\s*\w{5}$|\d{10}',
-                                                          max_length, min_length,
-                                                          *args, **kwargs)
+        super(ITSocialSecurityNumberField, self).__init__(
+            r'^\w{3}\s*\w{3}\s*\w{5}\s*\w{5}$|\d{10}',
+            max_length, min_length,
+            *args, **kwargs)
 
     def clean(self, value):
         value = super(ITSocialSecurityNumberField, self).clean(value)

@@ -1,6 +1,70 @@
+# -*- coding: utf-8 -*
+
 from django.utils.encoding import smart_text
 from django.utils.translation import ugettext_lazy as _
+from .it_codici import CODICI_CHOICES
+import re
 
+PATTERN = '^[A-Z]{6}[0-9]{2}([ABCDEHLMPRST])[0-9]{2}[A-Z][0-9]([A-Z]|[0-9])[0-9][A-Z]$'
+
+MONTHSCODE = ['A', 'B', 'C', 'D', 'E', 'H', 'L', 'M', 'P', 'R', 'S', 'T']
+
+def ssn_isvalid(code):
+    """``ssn_isvalid(code) -> bool``
+
+    This function checks if the given fiscal code is syntactically valid.
+
+    eg: isvalid('RCCMNL83S18D969H') -> True
+        isvalid('RCCMNL83S18D969') -> False
+    """
+    return isinstance(code, str) and re.match(PATTERN, code) is not None
+
+def ssn_get_birthday(code):
+    """``ssn_get_birthday(code) -> string``
+
+    Birthday of the person whose fiscal code is 'code', in the format DD-MM-YY.
+
+    Unfortunately it's not possible to guess the four digit birth year, given
+    that the Italian fiscal code uses only the last two digits (1983 -> 83).
+    Therefore, this function returns a string and not a datetime object.
+
+    eg: ssn_get_birthday('RCCMNL83S18D969H') -> 18-11-83
+    """
+    assert ssn_isvalid(code)
+
+    day = int(code[9:11])
+    day = day < 32 and day or day - 40
+
+    month = MONTHSCODE.index(code[8]) + 1
+    year = int(code[6:8])
+
+    return "%02d/%02d/%02d" % (day, month, year)
+
+
+def ssn_get_municipality(code):
+    """``ssn_get_municipality(code) -> string``
+
+    The municipality of the person whose fiscal code is 'code'.
+
+    eg: ssn_get_municipality('RCCMNL83S18D969H') -> 'Genova'
+        ssn_get_municipality('CNTCHR83T41D969D') -> 'Genova'
+    """
+    assert ssn_isvalid(code)
+    return CODICI_CHOICES.get(code[-5:-1], 'Altro')
+
+
+def ssn_get_sex(code):
+    """``get_sex(code) -> string``
+
+    The sex of the person whose fiscal code is 'code'.
+
+    eg: get_sex('RCCMNL83S18D969H') -> 'M'
+        get_sex('CNTCHR83T41D969D') -> 'F'
+    """
+
+    assert ssn_isvalid(code)
+
+    return int(code[9:11]) < 32 and 'M' or 'F'
 
 def ssn_check_digit(value):
     "Calculate Italian social security number check digit."
