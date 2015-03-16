@@ -1,12 +1,21 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
+import string
+
 from django.core.exceptions import ValidationError, ImproperlyConfigured
 from django.utils.translation import ugettext_lazy as _
+from .countries.iso_3166 import ISO_3166_1_ALPHA2_COUNTRY_CODES
 
 # Dictionary of ISO country code to IBAN length.
 #
-# References:
+# The official IBAN Registry document is the best source for up-to-date information about IBAN formats and which
+# countries are in IBAN.
+#
+# http://www.swift.com/dsp/resources/documents/IBAN_Registry.pdf
+#
+# Other Resources:
+#
 # https://en.wikipedia.org/wiki/International_Bank_Account_Number#IBAN_formats_by_country
 # http://www.ecbs.org/iban/france-bank-account-number.html
 # https://www.nordea.com/V%C3%A5ra+tj%C3%A4nster/Internationella+produkter+och+tj%C3%A4nster/Cash+Management/IBAN+countries/908472.html
@@ -76,9 +85,11 @@ IBAN_COUNTRY_CODE_LENGTH = {'AL': 28,  # Albania
                             'SI': 19,  # Slovenia
                             'SK': 24,  # Slovakia
                             'SM': 27,  # San Marino
+                            'TL': 23,  # Timor-Leste
                             'TN': 24,  # Tunisia
                             'TR': 26,  # Turkey
-                            'VG': 24}  # British Virgin Islands
+                            'VG': 24,  # British Virgin Islands
+                            'XK': 20}  # Republic of Kosovo (user-assigned country code)
 
 
 # Nordea has catalogued IBANs for some additional countries but they are not part of the office IBAN network yet.
@@ -120,6 +131,27 @@ class IBANValidator(object):
                     msg = 'Explicitly requested country code %s is not part of the configured IBAN validation set.' % country_code
                     raise ImproperlyConfigured(msg)
 
+    @staticmethod
+    def iban_checksum(value):
+        """ Returns check digits for an input IBAN number. Original checksum in input value is ignored. """
+
+        # 1. Move the two initial characters to the end of the string, replacing checksum for '00'
+        value = value[4:] + value[:2] + '00'
+
+        # 2. Replace each letter in the string with two digits, thereby expanding the string, where
+        #    A = 10, B = 11, ..., Z = 35.
+        value_digits = ''
+        for x in value:
+            if '0' <= x <= '9':
+                value_digits += x
+            elif 'A' <= x <= 'Z':
+                value_digits += str(ord(x) - 55)
+            else:
+                raise ValidationError(_('%s is not a valid character for IBAN.') % x)
+
+        # 3. The remainder of the number above when divided by 97 is then subtracted from 98.
+        return '%02d' % (98 - int(value_digits) % 97)
+
     def __call__(self, value):
         """
         Validates the IBAN value using the official IBAN validation algorithm.
@@ -131,7 +163,7 @@ class IBANValidator(object):
 
         value = value.upper().replace(' ', '').replace('-', '')
 
-        # 1. Check that the total IBAN length is correct as per the country. If not, the IBAN is invalid.
+        # Check that the total IBAN length is correct as per the country. If not, the IBAN is invalid.
         country_code = value[:2]
         if country_code in self.validation_countries:
 
@@ -144,21 +176,36 @@ class IBANValidator(object):
         if self.include_countries and country_code not in self.include_countries:
             raise ValidationError(_('%s IBANs are not allowed in this field.') % country_code)
 
-        # 2. Move the four initial characters to the end of the string.
-        value = value[4:] + value[:4]
-
-        # 3. Replace each letter in the string with two digits, thereby expanding the string, where
-        #    A = 10, B = 11, ..., Z = 35.
-        value_digits = ''
-        for x in value:
-            ord_value = ord(x)
-            if 48 <= ord_value <= 57:  # 0 - 9
-                value_digits += x
-            elif 65 <= ord_value <= 90:  # A - Z
-                value_digits += str(ord_value - 55)
-            else:
-                raise ValidationError(_('%s is not a valid character for IBAN.') % x)
-
-        # 4. Interpret the string as a decimal integer and compute the remainder of that number on division by 97.
-        if int(value_digits) % 97 != 1:
+        if self.iban_checksum(value) != value[2:4]:
             raise ValidationError(_('Not a valid IBAN.'))
+
+
+class BICValidator(object):
+    """
+    A validator for SWIFT Business Identifier Codes (ISO 9362:2009). Validation is based on the BIC structure found on
+    wikipedia.
+
+    https://en.wikipedia.org/wiki/ISO_9362#Structure
+    """
+
+    def __call__(self, value):
+        if value is None:
+            return value
+
+        value = value.upper()
+
+        # Length is 8 or 11.
+        bic_length = len(value)
+        if bic_length != 8 and bic_length != 11:
+            raise ValidationError(_('BIC codes have either 8 or 11 characters.'))
+
+        # First 4 letters are A - Z.
+        institution_code = value[:4]
+        for x in institution_code:
+            if x not in string.ascii_uppercase:
+                raise ValidationError(_('%s is not a valid institution code.') % institution_code)
+
+        # Letters 5 and 6 consist of an ISO 3166-1 alpha-2 country code.
+        country_code = value[4:6]
+        if country_code not in ISO_3166_1_ALPHA2_COUNTRY_CODES:
+            raise ValidationError(_('%s is not a valid country code.') % country_code)

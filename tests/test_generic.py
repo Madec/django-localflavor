@@ -5,10 +5,10 @@ from django.core.exceptions import ValidationError, ImproperlyConfigured
 from django.test import SimpleTestCase, TestCase
 from django.utils import formats
 
-from localflavor.generic.models import IBANField
-from localflavor.generic.validators import IBANValidator
-from localflavor.generic.forms import (DateField, DateTimeField,
-                                       SplitDateTimeField, IBANFormField)
+from localflavor.generic.countries.sepa import IBAN_SEPA_COUNTRIES
+from localflavor.generic.models import BICField, IBANField
+from localflavor.generic.validators import BICValidator, IBANValidator
+from localflavor.generic.forms import DateField, DateTimeField, SplitDateTimeField, BICFormField, IBANFormField
 
 
 class DateTimeFieldTestCase(SimpleTestCase):
@@ -110,7 +110,10 @@ class IBANTests(TestCase):
             'SA0380 0 0000 06 0 8 0 1 0 1 6 7 519 ',
 
             'CH9300762011623852957',
-            'IL620108000000099999999'
+            'IL620108000000099999999',
+            'EE982200221111099080',
+
+            None,
         ]
 
         invalid = {
@@ -118,13 +121,15 @@ class IBANTests(TestCase):
             'CA34CIBC123425345': 'CA is not a valid country code for IBAN.',
             'GB29ÉWBK60161331926819': 'is not a valid character for IBAN.',
             'SA0380000000608019167519': 'Not a valid IBAN.',
+            'EE012200221111099080': 'Not a valid IBAN.',
         }
 
+        iban_validator = IBANValidator()
         for iban in valid:
-            IBANValidator(iban)
+            iban_validator(iban)
 
         for iban in invalid:
-            self.assertRaisesMessage(ValidationError,  invalid[iban], IBANValidator(), iban)
+            self.assertRaisesMessage(ValidationError, invalid[iban], IBANValidator(), iban)
 
     def test_iban_fields(self):
         """ Test the IBAN model and form field. """
@@ -173,6 +178,8 @@ class IBANTests(TestCase):
         for input, output in valid.items():
             self.assertEqual(iban_model_field.clean(input, None), output)
 
+        self.assertIsNone(iban_model_field.to_python(None))
+
         # Invalid inputs for model field.
         for input, errors in invalid.items():
             with self.assertRaises(ValidationError) as context_manager:
@@ -192,6 +199,7 @@ class IBANTests(TestCase):
         self.assertEqual(iban_form_field.prepare_value('NL02ABNA0123456789'), 'NL02 ABNA 0123 4567 89')
         self.assertEqual(iban_form_field.prepare_value('NL02 ABNA 0123 4567 89'), 'NL02 ABNA 0123 4567 89')
         self.assertIsNone(iban_form_field.prepare_value(None))
+        self.assertEqual(iban_form_field.to_python(None), '')
 
     def test_include_countries(self):
         """ Test the IBAN model and form include_countries feature. """
@@ -225,11 +233,107 @@ class IBANTests(TestCase):
             self.assertEqual(context_manager.exception.messages, errors)
 
     def test_misconfigured_include_countries(self):
-        """ Test that an IBAN field or model raises an error when asked to validate a country not part of IBAN.
-        """
-        # Test an unassigned ISO 3166-1 country code so that the tests will work even if a country joins IBAN.
+        """ Test that an IBAN field or model raises an error when asked to validate a country not part of IBAN. """
+        # Test an unassigned ISO 3166-1 country code.
         self.assertRaises(ImproperlyConfigured, IBANValidator, include_countries=('JJ',))
         self.assertRaises(ImproperlyConfigured, IBANValidator, use_nordea_extensions=True, include_countries=('JJ',))
 
         # Test a Nordea IBAN when Nordea extensions are turned off.
         self.assertRaises(ImproperlyConfigured, IBANValidator, include_countries=('AO',))
+
+    def test_sepa_countries(self):
+        """ Test include_countries using the SEPA counties. """
+        # A few SEPA valid IBANs.
+        valid = {
+            'GI75 NWBK 0000 0000 7099 453': 'GI75NWBK000000007099453',
+            'CH93 0076 2011 6238 5295 7': 'CH9300762011623852957',
+            'GB29 NWBK 6016 1331 9268 19': 'GB29NWBK60161331926819'
+        }
+
+        # A few non-SEPA valid IBANs.
+        invalid = {
+            'SA03 8000 0000 6080 1016 7519': ['SA IBANs are not allowed in this field.'],
+            'CR05 1520 2001 0262 8406 6': ['CR IBANs are not allowed in this field.'],
+            'XK05 1212 0123 4567 8906': ['XK IBANs are not allowed in this field.']
+        }
+
+        self.assertFieldOutput(IBANFormField, field_kwargs={'include_countries': IBAN_SEPA_COUNTRIES},
+                               valid=valid, invalid=invalid)
+
+    def test_default_form(self):
+        iban_model_field = IBANField()
+        self.assertEqual(type(iban_model_field.formfield()), type(IBANFormField()))
+
+
+class BICTests(TestCase):
+    def test_bic_validator(self):
+        valid = [
+            'DEUTDEFF',
+            'deutdeff',
+
+            'NEDSZAJJXXX',
+            'NEDSZAJJxxx',
+
+            'DABADKKK',
+            'daBadKkK',
+
+            'UNCRIT2B912',
+            'DSBACNBXSHA',
+
+            None,
+        ]
+
+        invalid = {
+            'NEDSZAJJXX': 'BIC codes have either 8 or 11 characters.',
+            '': 'BIC codes have either 8 or 11 characters.',
+            'CIBCJJH2': 'JJ is not a valid country code.',
+            'DÉUTDEFF': 'is not a valid institution code.'
+        }
+
+        bic_validator = BICValidator()
+        for bic in valid:
+            bic_validator(bic)
+
+        for bic in invalid:
+            self.assertRaisesMessage(ValidationError,  invalid[bic], BICValidator(), bic)
+
+    def test_form_field_formatting(self):
+        bic_form_field = BICFormField()
+        self.assertEqual(bic_form_field.prepare_value('deutdeff'), 'DEUTDEFF')
+        self.assertIsNone(bic_form_field.prepare_value(None))
+        self.assertEqual(bic_form_field.to_python(None), '')
+
+    def test_bic_model_field(self):
+        valid = {
+            'DEUTDEFF': 'DEUTDEFF',
+            'NEDSZAJJXXX': 'NEDSZAJJXXX',
+            'DABADKKK': 'DABADKKK',
+            'UNCRIT2B912': 'UNCRIT2B912',
+            'DSBACNBXSHA': 'DSBACNBXSHA'
+        }
+
+        invalid = {
+            'NEDSZAJJXX': ['BIC codes have either 8 or 11 characters.'],
+            'CIBCJJH2': ['JJ is not a valid country code.'],
+            'D3UTDEFF': ['D3UT is not a valid institution code.']
+        }
+
+        self.assertFieldOutput(BICFormField, valid=valid, invalid=invalid)
+
+        bic_model_field = BICField()
+
+        # Test valid inputs for model field.
+        for input, output in valid.items():
+            self.assertEqual(bic_model_field.clean(input, None), output)
+
+        self.assertIsNone(bic_model_field.to_python(None))
+
+        # Invalid inputs for model field.
+        for input, errors in invalid.items():
+            with self.assertRaises(ValidationError) as context_manager:
+                bic_model_field.clean(input, None)
+            self.assertEqual(errors, context_manager.exception.messages)
+
+    def test_default_form(self):
+        bic_model_field = BICField()
+        self.assertEqual(type(bic_model_field.formfield()), type(BICFormField()))

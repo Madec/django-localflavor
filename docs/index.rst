@@ -98,14 +98,17 @@ how to use them::
     class MyForm(forms.Form):
         my_date_field = generic.forms.DateField()
 
-The ``localflavor`` package also has an IBAN model and form field. Here's an example
-of how to use the IBAN form field::
+The ``localflavor`` generic package also has IBAN and BIC model and form fields.
+Here's an example of how to use the IBAN and BIC form fields::
 
     from django import forms
-    from localflavor.generic.forms import IBANFormField
+    from localflavor.generic.forms import BICFormField, IBANFormField
 
     class MyForm(forms.Form):
         iban = IBANFormField()
+        bic = BICFormField()
+
+.. _ISO 3166 country codes: http://www.iso.org/iso/country_codes.htm
 
 Installation
 ============
@@ -181,7 +184,7 @@ Releases
 
 Due to django-localflavor' history as a former contrib app, the app is
 required to be working with the actively maintained Django versions. See
-the documenation about `Django's release process`_ for more information.
+the documentation about `Django's release process`_ for more information.
 
 django-localflavor releases are not tied to the release cycle of Django.
 Version numbers follow the appropriate Python standards, e.g. PEPs 386_ and 440_.
@@ -233,12 +236,12 @@ next release.
 
 When a backwards-incompatible change is made (for example, the removal
 or renaming of a province) the localflavor in question will raise a
-warning when that localflavor is imported. This provides a runtime
+warning when that localflavor is imported. This provides a run-time
 indication that something may require attention.
 
 However, once you have addressed the backwards compatibility (for
 example, auditing your code to see if any data migration is required),
-the warning serves no purpose. The warning can then be supressed.
+the warning serves no purpose. The warning can then be suppressed.
 For example, to suppress the warnings raised by the Indonesian
 localflavor you would use the following code::
 
@@ -251,11 +254,14 @@ localflavor you would use the following code::
 Indices and tables
 ==================
 
+.. toctree::
+
+    authors
+    changelog
+
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
-
-.. _ISO 3166 country codes: http://www.iso.org/iso/country_codes.htm
 
 .. toctree::
    :glob:
